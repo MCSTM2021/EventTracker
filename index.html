@@ -13,6 +13,9 @@
   .card{background:#fff;max-width:1000px;margin:24px auto;padding:24px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
   label{display:block;font-weight:600;margin:12px 0 4px} input,select,textarea{width:100%;padding:9px;border:1px solid #bbb;border-radius:4px;font-size:15px}
   textarea{min-height:120px} .row{display:flex;gap:16px;flex-wrap:wrap} .row>div{flex:1;min-width:180px}
+  .chk{border:1px solid #bbb;border-radius:4px;padding:8px 10px;max-height:190px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 14px}
+  .chk label{font-weight:400;margin:0;display:flex;gap:8px;align-items:center;cursor:pointer;font-size:14px}
+  .chk input{width:auto;margin:0} .chk-tools{font-size:13px;margin-top:4px} .chk-tools a{color:#2e5597}
   .btn{background:#1f3864;color:#fff;border:0;padding:10px 22px;border-radius:4px;margin-top:16px;cursor:pointer;font-size:15px}
   .btn.light{background:#6c757d} .msg{margin-top:12px;font-weight:600} .ok{color:#1a7f37} .err{color:#c62828}
   .hidden{display:none}
@@ -48,7 +51,9 @@
       <div><label>Start Time</label><input type="time" id="estart"></div>
       <div><label>End Time</label><input type="time" id="eend"></div>
     </div>
-    <label>Department</label><select id="edept"><option value="">Loading…</option></select>
+    <label>Department(s) <span style="font-weight:400;font-size:13px">– tick one or more</span></label>
+    <div id="edept" class="chk"><em>Loading…</em></div>
+    <div class="chk-tools"><a href="#" onclick="tickAll(true);return false">Select all</a> &nbsp;|&nbsp; <a href="#" onclick="tickAll(false);return false">Clear</a></div>
     <label>Event Head</label>
     <select id="ehead" onchange="$('eother').classList.toggle('hidden',this.value!=='Other')"><option value="">Loading…</option></select>
     <input id="eother" class="hidden" placeholder="Enter event head" style="margin-top:8px">
@@ -77,7 +82,7 @@
 </div>
 
 <script>
-const API_URL = 'https://script.google.com/macros/s/AKfycbxPK41EPuacUN3oR-DDmG4rR52gEhIg5z-5RDe0pFHcvyqFtx6c6weNy70HRjsA5zg5Dg/exec';
+const API_URL = 'PASTE_YOUR_WEB_APP_URL_HERE';
 
 async function api(p){ const r = await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(p)}); return r.json(); }
 const $ = id => document.getElementById(id);
@@ -88,6 +93,8 @@ const fmtDur = (s,e) => { const [h1,m1]=s.split(':').map(Number),[h2,m2]=e.split
   if(!(d>0)) return ''; const h=Math.floor(d/60), m=d%60; return ((h?h+' hr ':'')+(m?m+' min':'')).trim(); };
 function show(el,txt,ok){ el.textContent=txt; el.className='msg '+(ok?'ok':'err'); }
 const opts = a => a.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+const selectedDepts = () => [...document.querySelectorAll('#edept input:checked')].map(c=>c.value);
+function tickAll(v){ document.querySelectorAll('#edept input').forEach(c=>c.checked=v); }
 
 async function loadUsers(){
   try{
@@ -101,7 +108,7 @@ async function loadLists(){
     const r = await api({action:'lists',token:token()});
     if(checkExpired(r)) return;
     if(!r.ok) throw new Error(r.error);
-    $('edept').innerHTML = '<option value="">-- Select Department --</option>' + opts(r.departments);
+    $('edept').innerHTML = r.departments.map(d=>`<label><input type="checkbox" value="${esc(d)}"> ${esc(d)}</label>`).join('') || '<em>No departments in Lists tab</em>';
     $('ehead').innerHTML = '<option value="">-- Select Event Head --</option>' + opts(r.heads) + '<option value="Other">Other</option>';
     $('rdept').innerHTML = '<option value="">All Departments</option>' + opts(r.departments);
     $('rhead').innerHTML = '<option value="">All Event Heads</option>' + opts(r.heads);
@@ -130,14 +137,15 @@ function checkExpired(r){ if(!r.ok && /expired/i.test(r.error)){ alert(r.error);
 
 async function submitEvent(){
   const head = $('ehead').value==='Other' ? $('eother').value : $('ehead').value;
-  const ev = {date:$('edate').value,start:$('estart').value,end:$('eend').value,department:$('edept').value,head,description:$('edesc').value};
-  if(!ev.date||!ev.start||!ev.end||!ev.department||!ev.head) return show($('emsg'),'Please fill date, times, department and event head.',false);
+  const ev = {date:$('edate').value,start:$('estart').value,end:$('eend').value,departments:selectedDepts(),head,description:$('edesc').value};
+  if(!ev.date||!ev.start||!ev.end||!ev.head) return show($('emsg'),'Please fill date, times and event head.',false);
+  if(!ev.departments.length) return show($('emsg'),'Please tick at least one department.',false);
   show($('emsg'),'Saving…',true);
   const r = await api({action:'addEvent',token:token(),event:ev});
   if(checkExpired(r)) return;
   if(!r.ok) return show($('emsg'),r.error,false);
-  show($('emsg'),`Saved (${r.id}). You can add another event for the same day.`,true);
-  ['estart','eend','edesc','eother'].forEach(i=>$(i).value=''); $('ehead').value=''; $('eother').classList.add('hidden');
+  show($('emsg'),`Saved (${r.id}) for ${ev.departments.length} department(s). You can add another event.`,true);
+  ['estart','eend','edesc','eother'].forEach(i=>$(i).value=''); $('ehead').value=''; $('eother').classList.add('hidden'); tickAll(false);
 }
 
 async function getReport(){
@@ -160,23 +168,31 @@ async function getReport(){
 
   if(!r.rows.length){ $('repOut').innerHTML = html + '<p style="text-align:center;margin-top:20px">No events found for the selected filters.</p>'; return; }
 
-  const key = e => (e[group] || '(Not specified)');
-  let rows = r.rows.slice();
-  if(group) rows.sort((a,b)=> key(a).localeCompare(key(b)) || (a.date+a.start).localeCompare(b.date+b.start));
+  // Build list; when grouping by department, a shared event appears under each of its departments
+  let list;
+  if(group==='department'){
+    list = r.rows.flatMap(e => (e.departments.length ? e.departments : ['(Not specified)']).map(d => ({...e, grpKey:d})));
+    if(dept) list = list.filter(e => e.grpKey === dept);
+  } else if(group==='head'){
+    list = r.rows.map(e => ({...e, grpKey: e.head || '(Not specified)'}));
+  } else list = r.rows.slice();
+  if(group) list.sort((a,b)=> a.grpKey.localeCompare(b.grpKey) || (a.date+a.start).localeCompare(b.date+b.start));
 
   let body='', n=0, cur=null;
-  rows.forEach(e=>{
-    if(group && key(e)!==cur){
-      cur=key(e); n=0;
-      const cnt = rows.filter(x=>key(x)===cur).length;
+  list.forEach(e=>{
+    if(group && e.grpKey!==cur){
+      cur=e.grpKey; n=0;
+      const cnt = list.filter(x=>x.grpKey===cur).length;
       body += `<tr class="grp"><td colspan="8">${group==='department'?'Department':'Event Head'}: ${esc(cur)} — ${cnt} event(s)</td></tr>`;
     }
     n++;
     body += `<tr><td>${n}</td><td>${fmtD(e.date)}</td><td>${fmtT(e.start)} – ${fmtT(e.end)}</td><td>${fmtDur(e.start,e.end)}</td>
-      <td>${esc(e.department||'-')}</td><td>${esc(e.head)}</td><td style="white-space:pre-wrap">${esc(e.description)}</td><td>${esc(e.by)}</td></tr>`;
+      <td>${esc(e.departments.join(', ') || '-')}</td><td>${esc(e.head)}</td><td style="white-space:pre-wrap">${esc(e.description)}</td><td>${esc(e.by)}</td></tr>`;
   });
-  html += `<table><tr><th>S.No</th><th>Date</th><th>Time</th><th>Duration</th><th>Department</th><th>Event Head</th><th>Description</th><th>Submitted By</th></tr>${body}</table>
-    <p style="margin-top:8px">Total Programmes / Events: <b>${rows.length}</b> &nbsp;|&nbsp; Generated on ${new Date().toLocaleString('en-GB')}</p>`;
+  html += `<table><tr><th>S.No</th><th>Date</th><th>Time</th><th>Duration</th><th>Department(s)</th><th>Event Head</th><th>Description</th><th>Submitted By</th></tr>${body}</table>
+    <p style="margin-top:8px">Total Programmes / Events: <b>${r.rows.length}</b>
+    ${group==='department'?' &nbsp;<i>(events shared by several departments are listed under each)</i>':''}
+    &nbsp;|&nbsp; Generated on ${new Date().toLocaleString('en-GB')}</p>`;
   $('repOut').innerHTML = html;
 }
 
