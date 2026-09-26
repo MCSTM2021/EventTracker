@@ -10,16 +10,18 @@
   header h1{font-size:20px;margin:0} .who{font-size:14px}
   nav{background:#2e5597;padding:0 24px} nav button{background:none;border:0;color:#fff;padding:12px 16px;cursor:pointer;font-size:15px}
   nav button.active{background:#eef2f7;color:#1f3864;font-weight:600}
-  .card{background:#fff;max-width:900px;margin:24px auto;padding:24px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  .card{background:#fff;max-width:1000px;margin:24px auto;padding:24px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
   label{display:block;font-weight:600;margin:12px 0 4px} input,select,textarea{width:100%;padding:9px;border:1px solid #bbb;border-radius:4px;font-size:15px}
-  textarea{min-height:120px} .row{display:flex;gap:16px} .row>div{flex:1}
+  textarea{min-height:120px} .row{display:flex;gap:16px;flex-wrap:wrap} .row>div{flex:1;min-width:180px}
   .btn{background:#1f3864;color:#fff;border:0;padding:10px 22px;border-radius:4px;margin-top:16px;cursor:pointer;font-size:15px}
   .btn.light{background:#6c757d} .msg{margin-top:12px;font-weight:600} .ok{color:#1a7f37} .err{color:#c62828}
   .hidden{display:none}
-  table{width:100%;border-collapse:collapse;margin-top:12px} th,td{border:1px solid #999;padding:8px;vertical-align:top;font-size:14px}
-  th{background:#1f3864;color:#fff} .rep-head{text-align:center} .rep-head h2{margin:0;color:#1f3864} .rep-head h3{margin:6px 0}
-  @media print{header,nav,.no-print{display:none!important} body{background:#fff} .card{box-shadow:none;margin:0;max-width:100%}
-    th{background:#ddd!important;color:#000!important;-webkit-print-color-adjust:exact}}
+  table{width:100%;border-collapse:collapse;margin-top:12px} th,td{border:1px solid #999;padding:7px;vertical-align:top;font-size:13px}
+  th{background:#1f3864;color:#fff} tr.grp td{background:#d9e2f3;font-weight:700;font-size:14px}
+  .rep-head{text-align:center} .rep-head h2{margin:0;color:#1f3864} .rep-head h3{margin:6px 0} .rep-sub{font-size:14px;margin-top:4px}
+  @page{size:A4 landscape;margin:12mm}
+  @media print{header,nav,.no-print{display:none!important} body{background:#fff} .card{box-shadow:none;margin:0;max-width:100%;padding:0}
+    th,tr.grp td{-webkit-print-color-adjust:exact;print-color-adjust:exact} tr{page-break-inside:avoid}}
 </style>
 </head>
 <body>
@@ -41,14 +43,14 @@
   <!-- ENTRY -->
   <div class="card" id="entry">
     <h2>Add Programme / Event</h2>
-    <label>Date</label><input type="date" id="edate">
-    <div class="row"><div><label>Start Time</label><input type="time" id="estart"></div>
-                     <div><label>End Time</label><input type="time" id="eend"></div></div>
+    <div class="row">
+      <div><label>Date</label><input type="date" id="edate"></div>
+      <div><label>Start Time</label><input type="time" id="estart"></div>
+      <div><label>End Time</label><input type="time" id="eend"></div>
+    </div>
+    <label>Department</label><select id="edept"><option value="">Loading…</option></select>
     <label>Event Head</label>
-    <select id="ehead" onchange="document.getElementById('eother').classList.toggle('hidden',this.value!=='Other')">
-      <option value="">-- Select --</option><option>Guest Lecture</option><option>Workshop</option><option>Seminar</option>
-      <option>Webinar</option><option>Conference</option><option>Cultural Programme</option><option>Sports Event</option>
-      <option>Industrial Visit</option><option>Orientation Programme</option><option>Other</option></select>
+    <select id="ehead" onchange="$('eother').classList.toggle('hidden',this.value!=='Other')"><option value="">Loading…</option></select>
     <input id="eother" class="hidden" placeholder="Enter event head" style="margin-top:8px">
     <label>Description</label><textarea id="edesc" placeholder="Speaker, topic, venue, participants, outcome…"></textarea>
     <button class="btn" onclick="submitEvent()">Submit</button><div class="msg" id="emsg"></div>
@@ -57,7 +59,16 @@
   <!-- REPORT -->
   <div class="card hidden" id="report">
     <div class="no-print"><h2>Generate Report</h2>
-      <div class="row"><div><label>From</label><input type="date" id="rfrom"></div><div><label>To</label><input type="date" id="rto"></div></div>
+      <div class="row">
+        <div><label>From</label><input type="date" id="rfrom"></div>
+        <div><label>To</label><input type="date" id="rto"></div>
+      </div>
+      <div class="row">
+        <div><label>Department</label><select id="rdept"><option value="">All Departments</option></select></div>
+        <div><label>Event Head</label><select id="rhead"><option value="">All Event Heads</option></select></div>
+        <div><label>Group By</label><select id="rgroup">
+          <option value="">None (date order)</option><option value="department">Department</option><option value="head">Event Head</option></select></div>
+      </div>
       <button class="btn" onclick="getReport()">Generate</button>
       <button class="btn light hidden" id="printBtn" onclick="window.print()">Print / Save PDF</button>
       <div class="msg" id="rmsg"></div></div>
@@ -73,21 +84,35 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtD = d => new Date(d+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
 const fmtT = t => { let [h,m]=t.split(':').map(Number); const ap=h>=12?'PM':'AM'; h=h%12||12; return `${h}:${String(m).padStart(2,'0')} ${ap}`; };
+const fmtDur = (s,e) => { const [h1,m1]=s.split(':').map(Number),[h2,m2]=e.split(':').map(Number); const d=(h2*60+m2)-(h1*60+m1);
+  if(!(d>0)) return ''; const h=Math.floor(d/60), m=d%60; return ((h?h+' hr ':'')+(m?m+' min':'')).trim(); };
 function show(el,txt,ok){ el.textContent=txt; el.className='msg '+(ok?'ok':'err'); }
+const opts = a => a.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
 
 async function loadUsers(){
   try{
     const r = await api({action:'users'});
     if(!r.ok) throw new Error(r.error);
-    $('lu').innerHTML = '<option value="">-- Select User --</option>' +
-      r.users.map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('');
+    $('lu').innerHTML = '<option value="">-- Select User --</option>' + opts(r.users);
   }catch(e){ $('lu').innerHTML = '<option value="">Could not load users</option>'; show($('lmsg'),'Could not load users: '+e.message,false); }
 }
+async function loadLists(){
+  try{
+    const r = await api({action:'lists',token:token()});
+    if(checkExpired(r)) return;
+    if(!r.ok) throw new Error(r.error);
+    $('edept').innerHTML = '<option value="">-- Select Department --</option>' + opts(r.departments);
+    $('ehead').innerHTML = '<option value="">-- Select Event Head --</option>' + opts(r.heads) + '<option value="Other">Other</option>';
+    $('rdept').innerHTML = '<option value="">All Departments</option>' + opts(r.departments);
+    $('rhead').innerHTML = '<option value="">All Event Heads</option>' + opts(r.heads);
+  }catch(e){ show($('emsg'),'Could not load lists: '+e.message,false); }
+}
 function startApp(){
-  const s = JSON.parse(sessionStorage.getItem('erp')||'null'); if(!s) return;
+  const s = JSON.parse(sessionStorage.getItem('erp')||'null'); if(!s) return false;
   $('loginCard').classList.add('hidden'); $('app').classList.remove('hidden'); $('who').classList.remove('hidden');
   $('whoName').textContent = `${s.user} (${s.role})`;
   $('tabReport').classList.toggle('hidden', s.role!=='admin');
+  loadLists(); return true;
 }
 async function login(){
   if(!$('lu').value) return show($('lmsg'),'Please select a user name.',false);
@@ -100,13 +125,13 @@ async function login(){
 }
 async function logout(){ const s=JSON.parse(sessionStorage.getItem('erp')||'{}'); sessionStorage.removeItem('erp'); try{await api({action:'logout',token:s.token});}catch(e){} location.reload(); }
 function tab(t){ ['entry','report'].forEach(x=>{ $(x).classList.toggle('hidden',x!==t); $('tab'+x[0].toUpperCase()+x.slice(1)).classList.toggle('active',x===t); }); }
-function token(){ return JSON.parse(sessionStorage.getItem('erp')).token; }
+function token(){ return (JSON.parse(sessionStorage.getItem('erp')||'{}')).token; }
 function checkExpired(r){ if(!r.ok && /expired/i.test(r.error)){ alert(r.error); logout(); return true; } return false; }
 
 async function submitEvent(){
   const head = $('ehead').value==='Other' ? $('eother').value : $('ehead').value;
-  const ev = {date:$('edate').value,start:$('estart').value,end:$('eend').value,head,description:$('edesc').value};
-  if(!ev.date||!ev.start||!ev.end||!ev.head) return show($('emsg'),'Please fill date, times and event head.',false);
+  const ev = {date:$('edate').value,start:$('estart').value,end:$('eend').value,department:$('edept').value,head,description:$('edesc').value};
+  if(!ev.date||!ev.start||!ev.end||!ev.department||!ev.head) return show($('emsg'),'Please fill date, times, department and event head.',false);
   show($('emsg'),'Saving…',true);
   const r = await api({action:'addEvent',token:token(),event:ev});
   if(checkExpired(r)) return;
@@ -116,25 +141,46 @@ async function submitEvent(){
 }
 
 async function getReport(){
-  const from=$('rfrom').value,to=$('rto').value;
+  const from=$('rfrom').value, to=$('rto').value, dept=$('rdept').value, head=$('rhead').value, group=$('rgroup').value;
   if(!from||!to||from>to) return show($('rmsg'),'Select a valid date range.',false);
   show($('rmsg'),'Loading…',true);
-  const r = await api({action:'report',token:token(),from,to});
+  const r = await api({action:'report',token:token(),from,to,department:dept,head});
   if(checkExpired(r)) return;
   if(!r.ok){ $('repOut').innerHTML=''; return show($('rmsg'),r.error,false); }
   $('rmsg').textContent=''; $('printBtn').classList.remove('hidden');
+
+  const filters = [];
+  if(dept) filters.push('Department: <b>'+esc(dept)+'</b>');
+  if(head) filters.push('Event Head: <b>'+esc(head)+'</b>');
+  if(group) filters.push('Grouped by: <b>'+(group==='department'?'Department':'Event Head')+'</b>');
   let html = `<div class="rep-head"><h2>Manas College of Science Technology and Management</h2>
-    <h3>Programme / Event Details</h3><div>Period: ${fmtD(from)} to ${fmtD(to)}</div></div>`;
-  if(!r.rows.length) html += '<p style="text-align:center;margin-top:20px">No events recorded in this period.</p>';
-  else html += `<table><tr><th>S.No</th><th>Date</th><th>Time</th><th>Event Head</th><th>Description</th><th>Submitted By</th></tr>` +
-    r.rows.map((e,i)=>`<tr><td>${i+1}</td><td>${fmtD(e.date)}</td><td>${fmtT(e.start)} – ${fmtT(e.end)}</td>
-      <td>${esc(e.head)}</td><td style="white-space:pre-wrap">${esc(e.description)}</td><td>${esc(e.by)}</td></tr>`).join('') +
-    `</table><p style="margin-top:8px">Total Programmes / Events: <b>${r.rows.length}</b></p>`;
+    <h3>Programme / Event Details</h3>
+    <div class="rep-sub">Period: <b>${fmtD(from)}</b> to <b>${fmtD(to)}</b></div>
+    ${filters.length?'<div class="rep-sub">'+filters.join(' &nbsp;|&nbsp; ')+'</div>':''}</div>`;
+
+  if(!r.rows.length){ $('repOut').innerHTML = html + '<p style="text-align:center;margin-top:20px">No events found for the selected filters.</p>'; return; }
+
+  const key = e => (e[group] || '(Not specified)');
+  let rows = r.rows.slice();
+  if(group) rows.sort((a,b)=> key(a).localeCompare(key(b)) || (a.date+a.start).localeCompare(b.date+b.start));
+
+  let body='', n=0, cur=null;
+  rows.forEach(e=>{
+    if(group && key(e)!==cur){
+      cur=key(e); n=0;
+      const cnt = rows.filter(x=>key(x)===cur).length;
+      body += `<tr class="grp"><td colspan="8">${group==='department'?'Department':'Event Head'}: ${esc(cur)} — ${cnt} event(s)</td></tr>`;
+    }
+    n++;
+    body += `<tr><td>${n}</td><td>${fmtD(e.date)}</td><td>${fmtT(e.start)} – ${fmtT(e.end)}</td><td>${fmtDur(e.start,e.end)}</td>
+      <td>${esc(e.department||'-')}</td><td>${esc(e.head)}</td><td style="white-space:pre-wrap">${esc(e.description)}</td><td>${esc(e.by)}</td></tr>`;
+  });
+  html += `<table><tr><th>S.No</th><th>Date</th><th>Time</th><th>Duration</th><th>Department</th><th>Event Head</th><th>Description</th><th>Submitted By</th></tr>${body}</table>
+    <p style="margin-top:8px">Total Programmes / Events: <b>${rows.length}</b> &nbsp;|&nbsp; Generated on ${new Date().toLocaleString('en-GB')}</p>`;
   $('repOut').innerHTML = html;
 }
 
-startApp();
-loadUsers();
+if(!startApp()) loadUsers();
 </script>
 </body>
 </html>
