@@ -82,7 +82,7 @@
 </div>
 
 <script>
-const API_URL = 'PASTE_YOUR_WEB_APP_URL_HERE';
+const API_URL = 'https://script.google.com/macros/s/AKfycbxPK41EPuacUN3oR-DDmG4rR52gEhIg5z-5RDe0pFHcvyqFtx6c6weNy70HRjsA5zg5Dg/exec';
 
 async function api(p){ const r = await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(p)}); return r.json(); }
 const $ = id => document.getElementById(id);
